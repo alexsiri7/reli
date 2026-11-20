@@ -44,6 +44,11 @@ The MCP endpoint SHALL be protected by an OAuth 2.1 authorization server that a 
 - WHEN the connector discovers, registers and the owner signs in with the allowlisted account
 - THEN the connector can call Reli's tools
 
+#### Scenario: Refresh family revoked while an access token is live
+- GIVEN an unexpired MCP access token whose refresh family is revoked — by refresh-token reuse or by deleting the family's rows
+- WHEN the token is next presented
+- THEN the request is refused with 401 and the detail says to refresh or re-authorise
+
 ### Requirement: The web view signs in with a session cookie
 
 Opening the web view SHALL present Google sign-in. A successful sign-in SHALL set a secure, http-only, host-bound session cookie valid for seven days and return to the view; the view SHALL offer a "who am I" probe and sign-out. A refusal SHALL never trigger a browser credential prompt.

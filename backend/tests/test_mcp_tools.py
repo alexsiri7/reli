@@ -55,7 +55,7 @@ from backend.mcp_server import (
     unrelate,
     update_thing,
 )
-from backend.oauth_state import cleanup_and_store, revoked_tokens
+from backend.oauth_state import cleanup_and_store, mcp_refresh_tokens, revoked_tokens
 from backend.queries import MAX_LIMIT
 from backend.service import ThingNotFound
 from backend.tests.conftest import RETIRED_GOOGLE_TOOL_NAMES
@@ -993,9 +993,24 @@ def secret_key(monkeypatch):
 
 
 @pytest.fixture()
-def mcp_token(secret_key):
-    """What a connector holds after the Google sign-in: an ``aud="mcp"`` JWT the authorization server minted."""
-    return auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
+def mcp_token(secret_key, session):
+    """What a connector holds after the Google sign-in: an ``aud="mcp"`` JWT the authorization server
+    minted, naming the live refresh family it was issued under."""
+    family_id = str(uuid.uuid4())
+    cleanup_and_store(
+        session,
+        mcp_refresh_tokens,
+        "a-refresh-token",
+        {
+            "subject": "1234567890",
+            "email": "owner@example.com",
+            "client_id": "connector",
+            "scope": "",
+            "family_id": family_id,
+            "expires_at": datetime.now(UTC) + timedelta(days=30),
+        },
+    )
+    return auth.create_jwt("1234567890", "owner@example.com", audience="mcp", family_id=family_id)
 
 
 def _bearer(token):
@@ -1193,6 +1208,43 @@ def test_mcp_endpoint_refuses_a_revoked_jwt(client, session, mcp_token):
     assert response.status_code == 401
     assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
     assert "revoked" in response.json()["detail"]
+
+
+def test_mcp_endpoint_refuses_a_jwt_whose_refresh_family_was_deleted(client, session, mcp_token):
+    """#1808: CLAUDE.md's "Revoking a connector" statement ends the live access token, not just the chain."""
+    family_id = auth.decode_jwt(mcp_token, auth.MCP_AUDIENCE)["fid"]
+    assert client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token)).status_code == 200
+    session.execute(text("DELETE FROM mcp_refresh_tokens WHERE family_id = :f"), {"f": family_id})
+    session.commit()
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert "revoked" in response.json()["detail"]
+
+
+def test_mcp_endpoint_refuses_a_jwt_whose_refresh_family_is_past_its_deadline(client, session, mcp_token):
+    family_id = auth.decode_jwt(mcp_token, auth.MCP_AUDIENCE)["fid"]
+    assert client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token)).status_code == 200
+    session.execute(
+        text("UPDATE mcp_refresh_tokens SET expires_at = now() - interval '1 second' WHERE family_id = :f"),
+        {"f": family_id},
+    )
+    session.commit()
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
+
+    assert response.status_code == 401
+    assert "revoked" in response.json()["detail"]
+
+
+def test_mcp_endpoint_admits_a_jwt_that_names_no_refresh_family(client, session, secret_key):
+    """What a client that did not register the ``refresh_token`` grant holds: it cannot refresh, so
+    refusing it for want of a family would end it from its first request."""
+    token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
+
+    assert client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token)).status_code == 200
 
 
 def test_an_expired_jwt_is_refused_naming_the_refresh_path(client, secret_key):

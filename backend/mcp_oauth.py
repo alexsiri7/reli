@@ -20,8 +20,8 @@ refreshing indefinitely. A registration lives an hour until its first token is m
 as long as that family; the stores a caller without a credential can write to evict their row
 nearest expiry rather than refuse, so a flood of registrations or sign-in starts displaces other
 unfinished flows and nothing else. The JWT is the only credential ``/mcp`` accepts, and it lives an
-hour: nothing can revoke one once minted, so the hour bounds how long a stolen family's last access
-token outlives its revocation.
+hour: when the client holds a refresh family, the token names it, and revoking the family ends it
+on its next request.
 """
 
 from __future__ import annotations
@@ -620,7 +620,9 @@ def _issue_tokens(
     too, since it signs in again through the same registration: a refused issuance leaves it at its
     grace hour, the allowlist check above has already passed, so only an allowed account holds a
     registration past its first hour, and the move is only ever later (``GREATEST``), so a second
-    family never shortens it.
+    family never shortens it. The access token names *family_id* only when *refreshable*: a client
+    that never gets a tracked family has nothing for :func:`auth.is_revoked` to check, so its token
+    rides out its hour on the ``jti`` list alone, same as before #1808.
 
     Raises:
         _TokenError: ``invalid_grant`` when the account has left ``ALLOWED_EMAILS``.
@@ -634,7 +636,9 @@ def _issue_tokens(
             revoked,
         )
         raise _invalid_grant(auth.ACCOUNT_NOT_ALLOWED)
-    access_token = auth.create_jwt(grant.subject, grant.email, audience=auth.MCP_AUDIENCE)
+    access_token = auth.create_jwt(
+        grant.subject, grant.email, audience=auth.MCP_AUDIENCE, family_id=family_id if refreshable else None
+    )
     refresh_token = None
     if refreshable:
         refresh_token = secrets.token_urlsafe(32)

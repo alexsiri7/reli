@@ -387,10 +387,30 @@ def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any
 
 
 def revoke_refresh_token_family(session: Session, family_id: str) -> int:
-    """Delete every refresh token descended from one sign-in, consumed or live; the count deleted."""
+    """Delete every refresh token descended from one sign-in, consumed or live; the count deleted.
+
+    Deleting the rows also ends every access token minted under the family, on its next request,
+    through :func:`refresh_family_is_live` (#1808).
+    """
     table = McpRefreshTokenRecord.__table__  # type: ignore[attr-defined]
     revoked = session.execute(
         delete(McpRefreshTokenRecord).where(table.c.family_id == family_id).returning(table.c.refresh_token)
     ).all()
     session.commit()
     return len(revoked)
+
+
+def refresh_family_is_live(session: Session, family_id: str) -> bool:
+    """Whether the family still holds an unexpired refresh token, consumed or live.
+
+    A family revoked by :func:`revoke_refresh_token_family`, or deleted by hand as CLAUDE.md's
+    "Revoking a connector" does, answers ``False``, and so does one past its deadline. A read on
+    every ``/mcp`` request, so it neither purges nor commits.
+    """
+    table = McpRefreshTokenRecord.__table__  # type: ignore[attr-defined]
+    row = session.execute(
+        select(table.c.refresh_token)
+        .where(table.c.family_id == family_id, table.c.expires_at > datetime.now(UTC))
+        .limit(1)
+    ).first()
+    return row is not None

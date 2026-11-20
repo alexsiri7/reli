@@ -186,6 +186,9 @@ issuance in `mcp_oauth.py`, so it cuts off a connector's existing refresh chain 
 exchange is refused and the whole family is deleted. To
 revoke one connector while leaving the account able to sign in to others,
 `DELETE FROM mcp_refresh_tokens WHERE family_id = '<family_id>'` against `DATABASE_URL`.
+That also refuses the connector's live access token on its next `/mcp` request, because the token
+names its family in an `fid` claim and the bearer check finds no row for it (#1808); the same holds
+when reuse detection or the allowlist re-check deletes a family.
 `mcp_refresh_tokens` and `mcp_auth_codes` hold SHA-256 digests of the credentials, not the
 credentials (#1530), so a database read or a backup yields nothing redeemable, and `family_id` —
 never the token — is how a row is named. `mcp_registered_clients` holds the digest of each client
@@ -238,7 +241,7 @@ flood without a credential is counted before either refuses it. The tiers, per m
 10 (`RATE_LIMIT_AUTH_PER_MINUTE`); `/api`, `/mcp` and `/.well-known/` 60
 (`RATE_LIMIT_API_PER_MINUTE`). There is no LLM tier, because there are no LLM endpoints.
 `/healthz` and the bundle are exempt. An `/api` or `/mcp` request carrying a JWT this deploy signed,
-for an allowlisted account and not revoked by logout, is keyed by its subject, so the owner never
+for an allowlisted account and not revoked by logout or with its refresh family, is keyed by its subject, so the owner never
 shares a bucket with an attacker — not even one replaying a stolen copy of a revoked token; every other request
 is keyed by its client address. That address is the peer unless the peer is inside
 `TRUSTED_PROXY_CIDRS`, in which case it is the rightmost `X-Forwarded-For` entry that is not itself
