@@ -27,7 +27,10 @@ def _limits(monkeypatch, registration=10_000, auth_tier=10_000, api=10_000):
 
 
 def _register(client):
-    return client.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT]})
+    return client.post(
+        "/oauth/register",
+        json={"redirect_uris": [CLIENT_REDIRECT], "grant_types": ["authorization_code", "refresh_token"]},
+    )
 
 
 def _credentials(registration):
