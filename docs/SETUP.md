@@ -162,9 +162,9 @@ The frontend job audits twice. `npm audit --omit=dev` covers what ships and fail
 `scripts/npm_audit.py` covers the whole tree, devDependencies included, and fails on any advisory
 except one named by its GHSA id in that script's `EXCEPTIONS`, with the reason it cannot be fixed
 yet and when the entry goes. An entry also fails the job once its advisory is no longer reported or
-its package has a non-breaking fix, so it cannot outlive its reason. The one entry today is
-GHSA-fc5q-39xc-vjpf, a picomatch ReDoS with no patched release that only the build tools reach
-(#1880).
+its package has a non-breaking fix, so it cannot outlive its reason. There is no entry today: the
+last one, the picomatch ReDoS GHSA-fc5q-39xc-vjpf (#1880), went when vite 8.3.8 stopped pulling it
+in.
 
 A green run on `main` triggers `staging-pipeline.yml`: deploy to Railway staging, wait for
 `/healthz`, then deploy the same image to production. The secrets it needs are listed in

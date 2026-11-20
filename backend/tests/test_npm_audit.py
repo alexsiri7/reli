@@ -36,13 +36,28 @@ UNFIXABLE = ("picomatch", [_advisory(EXCUSED)], {"name": "vite", "version": "6.2
 THROUGH_IT = ("vite", ["picomatch"], {"name": "vite", "version": "6.2.7", "isSemVerMajor": True})
 
 
+EXCEPTION_REASON = "an advisory with no patched release. Remove this entry once it ships a fix (#1880)."
+
+
+def _audit_with_exception(tmp_path: Path) -> Path:
+    """The script as committed, with EXCUSED recorded as an exception: the real list may be empty."""
+    source = AUDIT.read_text()
+    declaration = "EXCEPTIONS: dict[str, str] = {}"
+    assert declaration in source
+    script = tmp_path / "npm_audit.py"
+    recorded = f"EXCEPTIONS: dict[str, str] = {{{EXCUSED!r}: {EXCEPTION_REASON!r}}}"
+    script.write_text(source.replace(declaration, recorded))
+    return script
+
+
 def _run(tmp_path: Path, stdout: str) -> subprocess.CompletedProcess:
     stub = tmp_path / "npm"
     (tmp_path / "report").write_text(stdout)
     stub.write_text(f'#!/usr/bin/env bash\necho "$*" >> {tmp_path}/args\ncat {tmp_path}/report\nexit 1\n')
     stub.chmod(0o755)
     env = {**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"}
-    return subprocess.run([sys.executable, str(AUDIT)], env=env, capture_output=True, text=True)
+    script = _audit_with_exception(tmp_path)
+    return subprocess.run([sys.executable, str(script)], env=env, capture_output=True, text=True)
 
 
 def test_it_audits_the_whole_tree_and_passes_on_the_recorded_advisory(tmp_path):
@@ -76,6 +91,16 @@ def test_it_fails_on_anything_else(tmp_path, report, complaint):
 
 def test_it_fails_when_npm_prints_no_report(tmp_path):
     assert _run(tmp_path, "npm ERR! network").returncode == 1
+
+
+def test_the_committed_script_passes_a_clean_report(tmp_path):
+    stub = tmp_path / "npm"
+    stub.write_text("#!/usr/bin/env bash\necho '{\"vulnerabilities\": {}}'\n")
+    stub.chmod(0o755)
+    env = {**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"}
+    result = subprocess.run([sys.executable, str(AUDIT)], env=env, capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_every_exception_is_named_and_gives_its_reason():
