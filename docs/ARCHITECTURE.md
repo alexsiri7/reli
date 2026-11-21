@@ -171,8 +171,9 @@ An empty secret — or a `SECRET_KEY` shorter than 32 bytes (#1534) — never op
 without `SECRET_KEY`, and `/api` without the Google sign-in, answer 401 to every request and log a
 warning at startup, while `/healthz` stays green so a missing secret cannot roll a deploy back.
 There is no dev-mode bypass. The MCP app's DNS-rebinding protection is off because the service is
-reached through a Cloudflare tunnel; that is safe only because the bearer header is mandatory and a
-cross-origin page cannot set one; the two decisions are coupled.
+reached through a Cloudflare tunnel; that is safe only because `/mcp` admits nothing but a bearer,
+which a rebound page cannot know, and never a cookie the browser would attach for it (#1823); the
+two decisions are coupled.
 
 ## 10. Scheduled Claude
 
