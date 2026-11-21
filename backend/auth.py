@@ -78,6 +78,9 @@ SESSION_COOKIE = "__Host-reli_session"
 # Binds an MCP sign-in to the browser that approved it on the consent page (#1701): the callback
 # honours an MCP state only alongside this cookie naming it. Same ``__Host-`` contract as above.
 MCP_FLOW_COOKIE = "__Host-reli_mcp_flow"
+# The web sign-in's counterpart (#1810): set when the view starts a sign-in, so a callback link
+# built from someone else's state cannot sign this browser in as them.
+WEB_FLOW_COOKIE = "__Host-reli_web_flow"
 # The longest ``code``, ``state`` or ``error`` the callback accepts: Google's code and the state
 # this service mints are far shorter, and anything longer is a caller's choice, not Google's.
 MAX_CALLBACK_PARAM_LENGTH = 2048
@@ -104,6 +107,7 @@ _SESSION_REVOKED = "Session revoked: sign in with Google at / again."
 AT_CAPACITY = "Server is at capacity; try again later"
 _CROSS_ORIGIN = "Refused: this request did not come from Reli's own page."
 NOT_THIS_BROWSER = "Sign-in was not approved from this browser: start again from the connector."
+_NOT_STARTED_HERE = "Sign-in was not started from this browser: sign in with Google at / again."
 
 # How a log line quotes a caller-supplied value. Cuts the escaped text, not the value: one
 # character can escape to ten.
@@ -371,7 +375,7 @@ class SessionOut(BaseModel):
 
 
 @router.get("/google", include_in_schema=False)
-def google_sign_in() -> SignInStart:
+def google_sign_in(response: Response) -> SignInStart:
     """Where to send the browser to sign in to the web view; the sign-in view navigates there.
 
     Answered as JSON rather than a redirect so the view can show the 501 — naming every empty
@@ -395,6 +399,15 @@ def google_sign_in() -> SignInStart:
             },
         )
 
+    response.set_cookie(
+        WEB_FLOW_COOKIE,
+        state,
+        max_age=WEB_SIGN_IN_TTL_SECONDS,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=True,
+    )
     return SignInStart(auth_url=google_login.authorization_url(state, code_verifier))
 
 
@@ -471,16 +484,23 @@ def google_callback(
     delivered there too, as an ``access_denied`` error (§4.1.2.1), because the client's redirect
     URI is where the person actually is.
 
-    The MCP branch is honoured only in the browser that clicked Continue on that flow's consent
-    page, which set ``MCP_FLOW_COOKIE`` to its state. Anywhere else it is a 400 in place, never a
-    redirect: an attacker can read their own client's state off their own consent page, and a
-    callback link built from it would otherwise send whoever opened it to the attacker's redirect
-    URI (#1701).
+    Each branch is honoured only in the browser that started it, which holds that flow's cookie
+    naming its state: ``WEB_FLOW_COOKIE``, set when the web view started the sign-in, or
+    ``MCP_FLOW_COOKIE``, set by the click on Continue on the consent page. Anywhere else it is a 400
+    in place, never a redirect: an attacker can obtain a state of their own, and a callback link
+    built from it would otherwise sign whoever opened it in as the attacker (#1810) or send them to
+    the attacker's redirect URI (#1701).
     """
+    # Not compare_digest: it raises on the non-ASCII state an attacker can put in the URL.
     with open_db_session() as session:
         web_flow = cleanup_and_pop(session, web_oauth_sessions, state)
         if web_flow is not None:
-            return _finish_web_sign_in(web_flow, code, error)
+            if request.cookies.get(WEB_FLOW_COOKIE) != state:
+                logger.warning("Web sign-in refused: the callback reached a browser that did not start it")
+                raise HTTPException(status_code=400, detail=_NOT_STARTED_HERE)
+            response = _finish_web_sign_in(web_flow, code, error)
+            delete_host_cookie(response, WEB_FLOW_COOKIE)
+            return response
 
         flow = cleanup_and_pop(session, mcp_oauth_sessions, state)
         if flow is None:

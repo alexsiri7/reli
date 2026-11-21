@@ -131,6 +131,10 @@ def _flow_cookie(state="server-state"):
     return {"Cookie": f"{auth.MCP_FLOW_COOKIE}={state}"}
 
 
+def _web_flow_cookie(state="web-state"):
+    return {"Cookie": f"{auth.WEB_FLOW_COOKIE}={state}"}
+
+
 def _session_cookie(response):
     cookie = response.headers["set-cookie"]
     assert cookie.startswith(auth.SESSION_COOKIE + "=")
@@ -312,7 +316,7 @@ def test_a_cancellation_error_cannot_forge_a_second_log_line(client, session, go
         response = client.get(
             "/api/auth/google/callback",
             params={"error": forged, "state": "server-state" if branch == "mcp" else "web-state"},
-            headers=_flow_cookie(),
+            headers=_flow_cookie() if branch == "mcp" else _web_flow_cookie(),
         )
 
     assert response.status_code == 302
@@ -337,7 +341,7 @@ def test_a_cancellation_logs_a_bounded_prefix_of_the_error(client, session, goog
                 "error": "x" * auth.MAX_CALLBACK_PARAM_LENGTH,
                 "state": "server-state" if branch == "mcp" else "web-state",
             },
-            headers=_flow_cookie(),
+            headers=_flow_cookie() if branch == "mcp" else _web_flow_cookie(),
         )
 
     assert response.status_code == 302
@@ -445,6 +449,31 @@ def test_starting_a_web_sign_in_remembers_the_verifier_and_points_at_google(clie
     stored = cleanup_and_get(session, web_oauth_sessions, query["state"])
     assert stored is not None
     assert google_login.s256_challenge(stored["google_code_verifier"]) == query["code_challenge"]
+    flow_cookie = response.headers["set-cookie"]
+    assert flow_cookie.startswith(f"{auth.WEB_FLOW_COOKIE}={query['state']};")
+    assert "HttpOnly" in flow_cookie
+    assert "SameSite=lax" in flow_cookie
+    assert "Secure" in flow_cookie
+    assert "Path=/" in flow_cookie
+    assert "Domain=" not in flow_cookie
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("GOOGLE_AUTH_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
+        ("RELI_BASE_URL", "http://reli.example.test"),
+    ],
+)
+def test_the_web_flow_cookie_is_secure_even_when_the_base_url_is_plain_http(client, monkeypatch, setting, value):
+    """The browser binding is no weaker on a deploy whose base URL is mis-set to http (#1533)."""
+    monkeypatch.setattr(settings, setting, value)
+
+    response = client.get("/api/auth/google")
+
+    assert response.status_code == 200
+    assert response.headers["set-cookie"].startswith(f"{auth.WEB_FLOW_COOKIE}=")
+    assert "Secure" in response.headers["set-cookie"]
 
 
 def test_starting_a_web_sign_in_refuses_up_front_naming_each_missing_setting(client, monkeypatch):
@@ -463,7 +492,11 @@ def test_a_good_web_sign_in_sets_the_session_cookie_and_lands_on_the_view(client
     google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
 
     with caplog.at_level(logging.DEBUG):
-        response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+        response = client.get(
+            "/api/auth/google/callback",
+            params={"code": "google-code", "state": "web-state"},
+            headers=_web_flow_cookie(),
+        )
 
     assert response.status_code == 302
     assert response.headers["location"] == "/"
@@ -480,6 +513,9 @@ def test_a_good_web_sign_in_sets_the_session_cookie_and_lands_on_the_view(client
     assert claims["email"] == "owner@example.com"
     assert token not in caplog.text
     assert cleanup_and_get(session, web_oauth_sessions, "web-state") is None
+    flow_cookie = response.headers.get_list("set-cookie")[1]
+    assert flow_cookie.startswith(auth.WEB_FLOW_COOKIE + "=")
+    assert "Max-Age=0" in flow_cookie
 
 
 def test_the_cookie_is_secure_even_when_the_base_url_is_plain_http(client, session, google, monkeypatch):
@@ -488,7 +524,9 @@ def test_the_cookie_is_secure_even_when_the_base_url_is_plain_http(client, sessi
     _seed_web_flow(session)
     google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
 
-    response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+    response = client.get(
+        "/api/auth/google/callback", params={"code": "google-code", "state": "web-state"}, headers=_web_flow_cookie()
+    )
 
     assert "Secure" in _session_cookie(response)
 
@@ -499,7 +537,9 @@ def test_the_cookie_is_secure_when_reli_base_url_is_mis_set_to_http(client, sess
     _seed_web_flow(session)
     google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
 
-    response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+    response = client.get(
+        "/api/auth/google/callback", params={"code": "google-code", "state": "web-state"}, headers=_web_flow_cookie()
+    )
 
     assert response.status_code == 302
     assert "Secure" in _session_cookie(response)
@@ -514,11 +554,15 @@ def test_a_web_account_outside_the_allowlist_is_sent_to_the_view_as_invite_only(
     )
 
     with caplog.at_level(logging.DEBUG):
-        response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+        response = client.get(
+            "/api/auth/google/callback",
+            params={"code": "google-code", "state": "web-state"},
+            headers=_web_flow_cookie(),
+        )
 
     assert response.status_code == 302
     assert response.headers["location"] == "/?error=invite_only"
-    assert "set-cookie" not in response.headers
+    assert [cookie.split("=", 1)[0] for cookie in response.headers.get_list("set-cookie")] == [auth.WEB_FLOW_COOKIE]
     assert "intruder@example.com" not in caplog.text
 
 
@@ -526,7 +570,9 @@ def test_a_cancelled_web_sign_in_is_sent_to_the_view_without_an_exchange(client,
     _seed_web_flow(session)
     seen = google(lambda request: httpx.Response(500))
 
-    response = client.get("/api/auth/google/callback", params={"error": "access_denied", "state": "web-state"})
+    response = client.get(
+        "/api/auth/google/callback", params={"error": "access_denied", "state": "web-state"}, headers=_web_flow_cookie()
+    )
 
     assert response.status_code == 302
     assert response.headers["location"] == "/?error=cancelled"
@@ -537,10 +583,43 @@ def test_a_google_refusal_of_a_web_sign_in_is_502_naming_the_remedy(client, sess
     _seed_web_flow(session)
     google(lambda request: httpx.Response(400, json={"error": "invalid_grant"}))
 
-    response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+    response = client.get(
+        "/api/auth/google/callback", params={"code": "google-code", "state": "web-state"}, headers=_web_flow_cookie()
+    )
 
     assert response.status_code == 502
     assert "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("state", "params", "headers"),
+    [
+        ("web-state", {"code": "google-code"}, {}),
+        ("web-state", {"code": "google-code"}, _web_flow_cookie("another-state")),
+        ("web-state", {"code": "google-code"}, _flow_cookie("web-state")),
+        ("web-ßtate", {"error": "access_denied"}, _web_flow_cookie()),
+    ],
+    ids=["without-cookie", "with-another-flows-cookie", "with-the-mcp-cookie", "non-ascii-state"],
+)
+def test_a_web_callback_in_a_browser_that_did_not_start_the_sign_in_is_refused_in_place(
+    client, session, google, state, params, headers
+):
+    """A callback link built from the attacker's own state must not sign this browser in as them (#1810)."""
+    _seed_web_flow(session, state=state)
+    seen = google(
+        lambda request: httpx.Response(
+            200, json={"access_token": "never-read", "id_token": _id_token(email="other@example.com")}
+        )
+    )
+
+    response = client.get("/api/auth/google/callback", params={**params, "state": state}, headers=headers)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == auth._NOT_STARTED_HERE
+    assert "location" not in response.headers
+    assert "set-cookie" not in response.headers
+    assert seen == []
+    assert cleanup_and_get(session, web_oauth_sessions, state) is None
 
 
 def test_me_answers_the_cookie_and_401_with_the_remedy_without_one(client):
