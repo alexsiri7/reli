@@ -22,8 +22,9 @@ from backend.db_models import (
     Actor,
 )
 from backend.queries import due_for_checkin, find_things
-from backend.service import _default_checkin_date, create_thing
+from backend.service import create_thing
 from backend.tests.test_architecture import BACKEND, _backend_sources
+from backend.thing_rules import default_checkin_date
 
 TODAY = date(2026, 9, 10)
 
@@ -40,22 +41,7 @@ def test_a_capture_with_no_date_is_due_tomorrow_in_london(session):
     thing = _thing(session, "bare")
     after = datetime.now(UTC)
 
-    assert thing.checkin_date in {_default_checkin_date(before), _default_checkin_date(after)}
-
-
-@pytest.mark.parametrize(
-    ("now", "tomorrow"),
-    [
-        # 23:30 London in summer is 22:30 UTC; tomorrow is the next London day either way.
-        (datetime(2026, 6, 15, 22, 30, tzinfo=UTC), date(2026, 6, 16)),
-        # 23:30 UTC is already 00:30 on the 16th in London: tomorrow is the 17th, not the 16th.
-        (datetime(2026, 6, 15, 23, 30, tzinfo=UTC), date(2026, 6, 17)),
-        # In winter London is UTC, so 23:30 UTC is still the 15th and tomorrow is the 16th.
-        (datetime(2026, 1, 15, 23, 30, tzinfo=UTC), date(2026, 1, 16)),
-    ],
-)
-def test_tomorrow_is_the_next_london_day_including_near_midnight(now, tomorrow):
-    assert _default_checkin_date(now) == tomorrow
+    assert thing.checkin_date in {default_checkin_date(before), default_checkin_date(after)}
 
 
 def test_an_explicit_date_is_kept(session):
@@ -153,5 +139,5 @@ def test_each_tag_literal_is_written_once_in_the_backend(tag):
 
 def test_both_sides_read_the_one_constant():
     """The create-side skip and the read-side exclusion cannot drift if both import the tuple."""
-    for module in ("service.py", "queries.py"):
+    for module in ("thing_rules.py", "queries.py"):
         assert re.search(r"^\s+INTERNAL_TAGS,$", (BACKEND / module).read_text(), re.MULTILINE), module

@@ -28,6 +28,7 @@ from .db_models import (
     RelationshipType,
     ThingRecord,
 )
+from .thing_rules import has_recordable_scope
 
 _THINGS: Table = SQLModel.metadata.tables["things"]
 _TAGS = _THINGS.c["tags"]
@@ -555,8 +556,8 @@ def user_model(
     only on :func:`backend.service.record_preference`: the shape is a tag plus an edge type, both
     writable through ``create_thing`` and ``relate``, and an evidence-less preference passing for a
     recorded one is the confidence float this design exists to avoid. Both floors are applied in
-    Python, so a blank scope is blank by the same ``str.strip()`` the write path rejects it with —
-    SQL's ``btrim`` would let a tab through.
+    Python, so a blank scope is blank by the same rule the write path rejects it with,
+    :func:`backend.thing_rules.has_recordable_scope` — SQL's ``btrim`` would let a tab through.
 
     *scope* matches exactly, case aside: ``scheduling`` and ``scheduling-preferences`` are different
     scopes, because there is no text search anywhere in Reli. There is deliberately no limit —
@@ -591,5 +592,5 @@ def user_model(
     return [
         Preference(thing=thing, evidence=evidence[thing.id])
         for thing in preferences
-        if thing.id in evidence and (thing.notes.get("scope") or "").strip()
+        if thing.id in evidence and has_recordable_scope(thing.notes)
     ]
